@@ -1,0 +1,28 @@
+rules_version = '2';
+// Regras dos arquivos (fotos, vídeos e documentos) — Ponte Solidária
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function okFile() {
+      return request.resource.size < 50 * 1024 * 1024
+        && (request.resource.contentType.matches('image/.*')
+          || request.resource.contentType.matches('video/.*')
+          || request.resource.contentType == 'application/pdf');
+    }
+
+    // Comprovações e atualizações: só a própria pessoa envia
+    match /proofs/{uid}/{file} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == uid && okFile();
+    }
+    match /timeline/{uid}/{file} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == uid && okFile();
+    }
+    // Comprovantes de doação: quem doou envia
+    match /receipts/{uid}/{file} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == uid && okFile();
+    }
+  }
+}
