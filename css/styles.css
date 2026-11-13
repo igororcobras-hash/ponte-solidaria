@@ -215,3 +215,11 @@ textarea.input { min-height: 110px; resize: vertical; }
 
 .loading { padding: 48px 16px; text-align: center; color: var(--muted); }
 details.card > summary { cursor: pointer; font-weight: 800; min-height: 32px; display: flex; align-items: center; }
+
+/* Caixa de idiomas (combo): setinha, digita para buscar, lista rola */
+.combo { position: relative; }
+.combo-input { width: 100%; padding-right: 48px; font-weight: 700; cursor: pointer; text-overflow: ellipsis; }
+.combo-arrow { position: absolute; right: 4px; top: 4px; width: 44px; height: 44px; border: 0; background: transparent; color: var(--muted, #555); display: grid; place-items: center; border-radius: 10px; cursor: pointer; }
+.combo.open .combo-arrow svg { transform: rotate(180deg); }
+.combo-list { position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 20; max-height: 280px; overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,.18); -webkit-overflow-scrolling: touch; }
+.combo-list[hidden] { display: none; }

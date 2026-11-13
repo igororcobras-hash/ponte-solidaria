@@ -205,35 +205,56 @@
         '<div class="narrow">' +
         '<h1 class="h1" lang="' + esc(info[0]) + '" dir="' + (info[4] || 'ltr') + '" style="font-size:2rem;padding-top:8px">' + esc(info[3]) + '</h1>' +
         '<p class="muted" style="margin:0">Escolha seu idioma · Choose your language · Elige tu idioma</p>' +
-        '<label class="search"><span class="sr-only">' + esc(t('lang_search')) + '</span>' + IC.search +
-        '<input id="lang-q" type="search" placeholder="' + esc(t('lang_search')) + '" autocomplete="off"></label>' +
-        '<div class="lang-list" role="radiogroup" aria-label="' + esc(t('language')) + '" id="lang-list"></div>' +
+        '<div class="combo" id="combo">' +
+        '<input id="lang-q" class="input combo-input" role="combobox" aria-expanded="false" aria-controls="lang-list" aria-label="' + esc(t('language')) + '" autocomplete="off" spellcheck="false" value="' + esc(info[1] === info[2] ? info[1] : info[1] + ' — ' + info[2]) + '">' +
+        '<button type="button" class="combo-arrow" id="lang-arrow" tabindex="-1" aria-label="' + esc(t('language')) + '">' + '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>' +
+        '<div class="lang-list combo-list" role="listbox" id="lang-list" hidden></div></div>' +
         (I18N.isFull(sel) ? '' : '<p class="notice warm" style="margin:0">' + esc(t('lang_partial')) + '</p>') +
         '<p class="small muted" style="margin:0;text-align:center">' + esc(t('lang_note')) + '</p>' +
         '<button class="btn block" id="lang-go" lang="' + esc(info[0]) + '">' + esc(t('continue')) + '</button></div>';
       shell({ html, help: 'help_lang', noNav: first, back: first ? null : '#/ajustes', title: t('language') });
-      const listEl = $('#lang-list');
+      const listEl = $('#lang-list'), qEl = $('#lang-q'), combo = $('#combo');
+      const norm = (x) => (x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const open = () => { listEl.hidden = false; qEl.setAttribute('aria-expanded', 'true'); combo.classList.add('open'); };
+      const close = () => { listEl.hidden = true; qEl.setAttribute('aria-expanded', 'false'); combo.classList.remove('open'); qEl.value = info[1] === info[2] ? info[1] : info[1] + ' — ' + info[2]; };
+      const choose = (code) => {
+        sel = code;
+        const l = I18N.LANGS.find((x) => x[0] === sel);
+        speak(l[3] + ' ' + l[1], sel);
+        draw();
+        const go2 = $('#lang-go'); if (go2) go2.focus();
+      };
       const drawList = (q) => {
-        q = (q || '').toLowerCase().trim();
-        const items = I18N.LANGS.filter((l) => !q || l[1].toLowerCase().includes(q) || l[2].toLowerCase().includes(q) || l[0].toLowerCase().includes(q));
+        q = norm(q);
+        const items = I18N.LANGS.filter((l) => !q || norm(l[1]).includes(q) || norm(l[2]).includes(q) || norm(l[0]).includes(q));
+        // os que começam com o texto digitado aparecem primeiro
+        if (q) items.sort((x, y) => (norm(y[1]).startsWith(q) || norm(y[2]).startsWith(q)) - (norm(x[1]).startsWith(q) || norm(x[2]).startsWith(q)));
         listEl.innerHTML = items.length ? items.map((l) =>
-          '<button class="lang-item" role="radio" aria-checked="' + (l[0] === sel) + '" data-code="' + esc(l[0]) + '">' +
+          '<button type="button" class="lang-item" role="option" aria-selected="' + (l[0] === sel) + '" aria-checked="' + (l[0] === sel) + '" data-code="' + esc(l[0]) + '">' +
           '<span style="display:flex;flex-direction:column;gap:2px"><span class="native" lang="' + esc(l[0]) + '">' + esc(l[1]) + '</span><span class="small muted">' + esc(l[2]) + '</span></span>' +
           (l[0] === sel ? '<span style="color:var(--accent)">' + IC.checkBig + '</span>' : '') + '</button>').join('')
           : '<div class="empty">' + esc(t('lang_none')) + '</div>';
-        $$('.lang-item', listEl).forEach((b) => {
-          b.onclick = () => {
-            sel = b.dataset.code;
-            const l = I18N.LANGS.find((x) => x[0] === sel);
-            speak(l[3] + ' ' + l[1], sel);
-            draw();
-            const again = $('.lang-item[data-code="' + sel + '"]');
-            if (again) again.focus();
-          };
-        });
+        $$('.lang-item', listEl).forEach((b) => { b.onmousedown = (e) => e.preventDefault(); b.onclick = () => choose(b.dataset.code); });
+        const cur = $('.lang-item[aria-checked="true"]', listEl); if (cur && !q) cur.scrollIntoView({ block: 'nearest' });
       };
       drawList('');
-      $('#lang-q').oninput = (e) => drawList(e.target.value);
+      qEl.onfocus = () => { qEl.select(); drawList(''); open(); };
+      qEl.onclick = () => { if (listEl.hidden) { drawList(''); open(); } };
+      qEl.oninput = (e) => { open(); drawList(e.target.value); };
+      qEl.onkeydown = (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); const f = $('.lang-item', listEl); if (!listEl.hidden && f) choose(f.dataset.code); else { drawList(''); open(); } }
+        else if (e.key === 'Escape') { close(); }
+        else if (e.key === 'ArrowDown') { e.preventDefault(); open(); const f = $('.lang-item', listEl); if (f) f.focus(); }
+      };
+      listEl.onkeydown = (e) => {
+        const items = $$('.lang-item', listEl), i = items.indexOf(document.activeElement);
+        if (e.key === 'ArrowDown') { e.preventDefault(); if (items[i + 1]) items[i + 1].focus(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); if (i > 0) items[i - 1].focus(); else qEl.focus(); }
+        else if (e.key === 'Escape') { close(); qEl.focus(); }
+      };
+      $('#lang-arrow').onmousedown = (e) => e.preventDefault();
+      $('#lang-arrow').onclick = () => { if (listEl.hidden) { qEl.focus(); drawList(''); open(); } else { close(); } };
+      qEl.onblur = () => setTimeout(() => { if (!combo.contains(document.activeElement)) close(); }, 120);
       $('#lang-go').onclick = () => { I18N.set(sel, true); go(first || !getMode() ? '#/modo' : '#/ajustes'); };
     };
     draw();

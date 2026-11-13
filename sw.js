@@ -1,5 +1,5 @@
 // Service worker: deixa o app abrir mesmo com internet fraca.
-const CACHE = 'ponte-v5';
+const CACHE = 'ponte-v6';
 const FILES = [
   './', 'index.html', 'manifest.webmanifest', 'css/styles.css',
   'js/config.js', 'js/i18n.js', 'js/store.js', 'js/voice.js', 'js/app.js',
