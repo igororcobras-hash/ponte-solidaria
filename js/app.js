@@ -63,7 +63,7 @@
   }
   function errText(e) {
     const code = (e && e.code) || 'generic';
-    const s = t('err_' + code, { mb: store ? store.maxMb : 50 });
+    const s = t('err_' + code, { mb: 0 });
     return s === 'err_' + code ? t('err_generic') : s;
   }
   async function busy(btn, fn) {
@@ -181,11 +181,17 @@
     return '<div style="display:flex;flex-direction:column;gap:6px"><div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct(p.raised, p.goalAmount) + '" aria-label="' + esc(t('raised_of', { a: I18N.money(p.raised), b: I18N.money(p.goalAmount) })) + '"><span style="width:' + pct(p.raised, p.goalAmount) + '%"></span></div>' +
       '<div class="row between small muted"><span><b style="color:var(--ink)">' + esc(I18N.money(p.raised)) + '</b> ' + esc(t('raised_of', { a: '', b: I18N.money(p.goalAmount) }).trim()) + '</span><span>' + esc(t('donors', { n: p.donorsCount || 0 })) + '</span></div></div>';
   }
+  function linkBtn(item) {
+    return '<a class="btn secondary small" href="' + esc(item.link) + '" target="_blank" rel="noopener noreferrer">' + IC.file + esc(t('open_video')) + '</a>';
+  }
   function mediaHtml(item) {
-    if (!item.url) return '<span class="small muted">' + IC.file + ' ' + esc(t('proof_sample')) + '</span>';
-    if (item.kind === 'photo') return '<img class="media" src="' + esc(item.url) + '" alt="' + esc(item.title || '') + '" loading="lazy">';
-    if (item.kind === 'video') return '<video class="media" src="' + esc(item.url) + '" controls preload="metadata"></video>';
-    return '<a class="btn secondary small" href="' + esc(item.url) + '" target="_blank" rel="noopener" download="' + esc(item.fileName || 'arquivo') + '">' + IC.file + esc(t('open_file')) + '</a>';
+    let h = '';
+    if (item.url) {
+      if (item.kind === 'photo') h += '<img class="media" src="' + esc(item.url) + '" alt="' + esc(item.title || '') + '" loading="lazy">';
+      else h += '<a class="btn secondary small" href="' + esc(item.url) + '" target="_blank" rel="noopener" download="' + esc(item.fileName || 'arquivo') + '">' + IC.file + esc(t('open_file')) + '</a>';
+    }
+    if (item.link) h += (h ? ' ' : '') + linkBtn(item);
+    return h || '<span class="small muted">' + IC.file + ' ' + esc(t('proof_sample')) + '</span>';
   }
 
   // ---------- telas ----------
@@ -380,7 +386,7 @@
         '<b>' + esc(titleOf(e)) + '</b>' +
         (e.text ? '<span style="color:var(--ink-2)">' + esc(e.text) + '</span>' : '') +
         (e.type === 'expense' && e.amount ? '<span class="small muted">' + esc(I18N.money(e.amount)) + '</span>' : '') +
-        (e.url ? mediaHtml(e) : '') + '</div></li>').join('') : '<p class="empty">' + esc(t('tl_empty')) + '</p>';
+        ((e.url || e.link) ? mediaHtml(e) : '') + '</div></li>').join('') : '<p class="empty">' + esc(t('tl_empty')) + '</p>';
     };
     draw();
     $$('.chip').forEach((c) => {
@@ -556,7 +562,8 @@
         '<section class="card"><h2 class="h2">' + esc(t('proofs')) + '</h2>' +
         (p ? '<form id="proof-form" style="display:flex;flex-direction:column;gap:12px">' +
           '<label class="field"><span>' + esc(t('proof_title')) + '</span><input class="input" id="pr-title" required></label>' +
-          '<label class="field"><span>' + esc(t('proof_file')) + '</span><input class="input" type="file" id="pr-file" accept="image/*,video/*,application/pdf" required></label>' +
+          '<label class="field"><span>' + esc(t('proof_file')) + '</span><input class="input" type="file" id="pr-file" accept="image/*,application/pdf"></label>' +
+          '<label class="field"><span>' + esc(t('proof_link')) + '</span><input class="input" type="url" id="pr-link" inputmode="url" placeholder="https://"><small class="muted">' + esc(t('proof_link_hint')) + '</small></label>' +
           '<label class="field"><span>' + esc(t('visibility')) + '</span><select class="input" id="pr-vis">' + opt('donors', t('vis_donors'), 'donors') + opt('public', t('vis_public'), 'donors') + '</select></label>' +
           '<button class="btn block" id="pr-go">' + esc(t('add_proof')) + '</button></form>' +
           proofs.map((pr) => '<div class="row between" style="border-top:1px solid var(--line);padding-top:10px"><span>' + esc(pr.title) + ' <span class="small muted">· ' + esc(t(pr.visibility === 'public' ? 'proof_public' : 'proof_restricted')) + '</span></span>' +
@@ -568,7 +575,8 @@
           '<label class="field"><span>' + esc(t('update_title')) + '</span><input class="input" id="u-title" required></label>' +
           '<label class="field"><span>' + esc(t('update_text')) + '</span><textarea class="input" id="u-text"></textarea></label>' +
           '<label class="field"><span>' + esc(t('update_amount')) + '</span><input class="input" id="u-amount" inputmode="decimal"></label>' +
-          '<label class="field"><span>' + esc(t('attach')) + '</span><input class="input" type="file" id="u-file" accept="image/*,video/*,application/pdf"></label>' +
+          '<label class="field"><span>' + esc(t('attach')) + '</span><input class="input" type="file" id="u-file" accept="image/*,application/pdf"></label>' +
+          '<label class="field"><span>' + esc(t('proof_link')) + '</span><input class="input" type="url" id="u-link" inputmode="url" placeholder="https://"></label>' +
           '<button class="btn block" id="u-go">' + esc(t('send')) + '</button></form>' : '') +
 
         (p ? '<section class="card"><h2 class="h2">' + esc(t('donations_received')) + '</h2>' +
@@ -605,8 +613,9 @@
       e.preventDefault();
       const file = $('#pr-file').files[0], title = $('#pr-title').value.trim();
       if (!title) return $('#pr-title').focus();
-      if (!file) return $('#pr-file').focus();
-      busy($('#pr-go'), async () => { await store.addProof(me.uid, file, { title, visibility: $('#pr-vis').value }); toast(t('saved')); route(); });
+      const link = $('#pr-link').value.trim();
+      if (!file && !link) { toast(t('err_need_file_or_link')); return $('#pr-file').focus(); }
+      busy($('#pr-go'), async () => { await store.addProof(me.uid, file, { title, link, visibility: $('#pr-vis').value }); toast(t('saved')); route(); });
     };
     $$('[data-del]').forEach((b) => { b.onclick = () => busy(b, async () => { await store.deleteProof(me.uid, b.dataset.del); route(); }); });
     const upf = $('#up-form');
@@ -616,7 +625,7 @@
       if (!title) return $('#u-title').focus();
       busy($('#u-go'), async () => {
         const amt = num($('#u-amount').value);
-        await store.addTimeline(me.uid, { type: $('#u-type').value, title, text: $('#u-text').value.trim(), amount: amt || null }, $('#u-file').files[0] || null);
+        await store.addTimeline(me.uid, { type: $('#u-type').value, title, text: $('#u-text').value.trim(), amount: amt || null, link: $('#u-link').value.trim() }, $('#u-file').files[0] || null);
         toast(t('saved')); route();
       });
     };

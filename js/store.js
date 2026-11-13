@@ -1,7 +1,7 @@
 // ============================================================
 // Camada de dados. Duas versões com a mesma interface:
 //  - LocalStore: modo demonstração (salva no navegador)
-//  - FirebaseStore: produção (Firebase Auth + Firestore + Storage)
+//  - FirebaseStore: produção (Firebase Auth + Firestore, plano gratuito)
 // ============================================================
 (function () {
   'use strict';
@@ -14,15 +14,63 @@
     constructor(code) { super(code); this.code = code; }
   }
 
-  function checkSize(file, maxMb) {
-    if (file && file.size > maxMb * 1024 * 1024) throw new AppError('file_too_big');
+  // Plano gratuito: sem Cloud Storage. Fotos são reduzidas no navegador e
+  // guardadas dentro do próprio documento; PDF só pequeno; vídeo vai por link.
+  const MAX_PDF_KB = 600;
+  const MAX_IMG_KB = 300;
+
+  function readDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = () => reject(new AppError('upload_failed'));
+      r.readAsDataURL(file);
+    });
   }
 
-  function fileKind(file) {
-    const t = (file && file.type) || '';
-    if (t.startsWith('video/')) return 'video';
-    if (t.startsWith('image/')) return 'photo';
-    return 'doc';
+  async function compressImage(file) {
+    const src = await readDataUrl(file);
+    const img = await new Promise((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new AppError('upload_failed'));
+      i.src = src;
+    });
+    let w = img.naturalWidth, h = img.naturalHeight;
+    let side = Math.min(1280, Math.max(w, h));
+    let q = 0.75, out = '';
+    for (let n = 0; n < 8; n++) {
+      const k = Math.min(1, side / Math.max(w, h));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(w * k)); c.height = Math.max(1, Math.round(h * k));
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      out = c.toDataURL('image/jpeg', q);
+      if (out.length * 0.75 <= MAX_IMG_KB * 1024) return out;
+      side = Math.round(side * 0.8); q = Math.max(0.5, q - 0.06);
+    }
+    throw new AppError('file_too_big');
+  }
+
+  // Devolve { url, kind, fileName } pronto para gravar no documento.
+  async function prepareFile(file) {
+    if (!file) return null;
+    const t = file.type || '';
+    if (t.startsWith('video/')) throw new AppError('video_use_link');
+    if (t.startsWith('image/')) return { url: await compressImage(file), kind: 'photo', fileName: file.name };
+    if (t === 'application/pdf') {
+      if (file.size > MAX_PDF_KB * 1024) throw new AppError('pdf_too_big');
+      return { url: await readDataUrl(file), kind: 'doc', fileName: file.name };
+    }
+    throw new AppError('file_type');
+  }
+
+  function cleanLink(l) {
+    l = (l || '').trim();
+    if (!l) return '';
+    if (!/^https?:\/\//i.test(l)) l = 'https://' + l;
+    try { return new URL(l).href; } catch (e) { throw new AppError('bad_link'); }
   }
 
   // ----------------------------------------------------------
@@ -66,17 +114,6 @@
         return Array.from(new Uint8Array(b)).map((x) => x.toString(16).padStart(2, '0')).join('');
       } catch (e) { return 'plain:' + s; }
     }
-    _file(file) {
-      return new Promise((resolve, reject) => {
-        if (!file) return resolve(null);
-        try { checkSize(file, this.maxMb); } catch (e) { return reject(e); }
-        const r = new FileReader();
-        r.onload = () => resolve(r.result);
-        r.onerror = () => reject(new AppError('upload_failed'));
-        r.readAsDataURL(file);
-      });
-    }
-
     onAuth(cb) { this.listeners.push(cb); cb(this.currentUser()); }
     currentUser() {
       const u = this.uid && this.db.users[this.uid];
@@ -128,8 +165,10 @@
 
     async listProofs(uid) { return (this.db.proofs[uid] || []).slice().sort(byDateDesc); }
     async addProof(uid, file, meta) {
-      const url = await this._file(file);
-      (this.db.proofs[uid] = this.db.proofs[uid] || []).push(Object.assign({ id: rid(), kind: fileKind(file), url, fileName: file.name, createdAt: now() }, meta));
+      const f = await prepareFile(file);
+      const link = cleanLink(meta && meta.link);
+      if (!f && !link) throw new AppError('need_file_or_link');
+      (this.db.proofs[uid] = this.db.proofs[uid] || []).push(Object.assign({ id: rid(), kind: f ? f.kind : 'link', url: f ? f.url : null, fileName: f ? f.fileName : null, createdAt: now() }, meta, { link: link || null }));
       this._save();
     }
     async deleteProof(uid, id) {
@@ -138,14 +177,15 @@
 
     async listTimeline(uid) { return (this.db.timeline[uid] || []).slice().sort(byDateDesc); }
     async addTimeline(uid, entry, file) {
-      const url = await this._file(file);
-      (this.db.timeline[uid] = this.db.timeline[uid] || []).push(Object.assign({ id: rid(), createdAt: now(), url, kind: file ? fileKind(file) : null }, entry));
+      const f = await prepareFile(file);
+      const link = cleanLink(entry && entry.link);
+      (this.db.timeline[uid] = this.db.timeline[uid] || []).push(Object.assign({ id: rid(), createdAt: now(), url: f ? f.url : null, kind: f ? f.kind : (link ? 'link' : null) }, entry, { link: link || null }));
       this._save();
     }
 
     async createDonation(data, file) {
-      const url = await this._file(file);
-      this.db.donations.push(Object.assign({ id: rid(), status: 'pending', createdAt: now(), receiptUrl: url }, data));
+      const f = await prepareFile(file);
+      this.db.donations.push(Object.assign({ id: rid(), status: 'pending', createdAt: now(), receiptUrl: f ? f.url : null }, data));
       this._save();
     }
     async listDonationsFor(uid) { return this.db.donations.filter((d) => d.beneficiaryUid === uid).sort(byDateDesc); }
@@ -189,17 +229,16 @@
   };
 
   class FirebaseStore {
-    constructor(cfg) { this.cfg = cfg; this.mode = 'firebase'; this.listeners = []; this.user = null; this.maxMb = window.MAX_FILE_MB || 50; }
+    constructor(cfg) { this.cfg = cfg; this.mode = 'firebase'; this.listeners = []; this.user = null; }
 
     async init() {
       const base = 'https://www.gstatic.com/firebasejs/' + FB_VER + '/';
-      for (const m of ['firebase-app-compat.js', 'firebase-auth-compat.js', 'firebase-firestore-compat.js', 'firebase-storage-compat.js']) {
+      for (const m of ['firebase-app-compat.js', 'firebase-auth-compat.js', 'firebase-firestore-compat.js']) {
         await loadScript(base + m);
       }
       firebase.initializeApp(this.cfg);
       this.auth = firebase.auth();
       this.fs = firebase.firestore();
-      this.st = firebase.storage();
       try { await this.auth.getRedirectResult(); } catch (e) {}
       await new Promise((resolve) => {
         let first = true;
@@ -218,16 +257,6 @@
       }
       this.listeners.forEach((f) => f(this.user));
     }
-    async _upload(folder, file) {
-      if (!file) return { url: null, path: null };
-      checkSize(file, this.maxMb);
-      const safe = file.name.replace(/[^\w.\-]+/g, '_').slice(-80);
-      const path = folder + '/' + rid() + '_' + safe;
-      const ref = this.st.ref(path);
-      await ref.put(file, { contentType: file.type || 'application/octet-stream' });
-      return { url: await ref.getDownloadURL(), path };
-    }
-
     onAuth(cb) { this.listeners.push(cb); cb(this.user); }
     currentUser() { return this.user; }
     async demoSignIn() { throw new AppError('generic'); }
@@ -306,22 +335,23 @@
       if (status === 'verified') await this.fs.collection('profiles').doc(uid).collection('timeline').add({ type: 'verified', createdAt: now() });
     }),
     addProof: wrap(async function (uid, file, meta) {
-      const up = await this._upload('proofs/' + uid, file);
-      await this.fs.collection('profiles').doc(uid).collection('proofs').add(Object.assign({ kind: fileKind(file), url: up.url, path: up.path, fileName: file.name, createdAt: now() }, meta));
+      const f = await prepareFile(file);
+      const link = cleanLink(meta && meta.link);
+      if (!f && !link) throw new AppError('need_file_or_link');
+      await this.fs.collection('profiles').doc(uid).collection('proofs').add(Object.assign({ kind: f ? f.kind : 'link', url: f ? f.url : null, fileName: f ? f.fileName : null, createdAt: now() }, meta, { link: link || null }));
     }),
     deleteProof: wrap(async function (uid, id) {
       const ref = this.fs.collection('profiles').doc(uid).collection('proofs').doc(id);
-      const d = await ref.get();
-      if (d.exists && d.data().path) { try { await this.st.ref(d.data().path).delete(); } catch (e) {} }
       await ref.delete();
     }),
     addTimeline: wrap(async function (uid, entry, file) {
-      const up = await this._upload('timeline/' + uid, file);
-      await this.fs.collection('profiles').doc(uid).collection('timeline').add(Object.assign({ createdAt: now(), url: up.url, kind: file ? fileKind(file) : null }, entry));
+      const f = await prepareFile(file);
+      const link = cleanLink(entry && entry.link);
+      await this.fs.collection('profiles').doc(uid).collection('timeline').add(Object.assign({ createdAt: now(), url: f ? f.url : null, kind: f ? f.kind : (link ? 'link' : null) }, entry, { link: link || null }));
     }),
     createDonation: wrap(async function (data, file) {
-      const up = await this._upload('receipts/' + data.donorUid, file);
-      await this.fs.collection('donations').add(Object.assign({ status: 'pending', createdAt: now(), receiptUrl: up.url }, data));
+      const f = await prepareFile(file);
+      await this.fs.collection('donations').add(Object.assign({ status: 'pending', createdAt: now(), receiptUrl: f ? f.url : null }, data));
     }),
     listDonationsFor: wrap(async function (uid) {
       const s = await this.fs.collection('donations').where('beneficiaryUid', '==', uid).get();

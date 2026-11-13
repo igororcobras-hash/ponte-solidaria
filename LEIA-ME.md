@@ -1,7 +1,7 @@
 # Ponte Solidária — como testar e publicar
 
 App web (funciona no celular e no computador) que pode ser instalado como aplicativo
-e enviado para a Google Play Store.
+e depois enviado para a Google Play Store.
 
 ## O que já está pronto
 
@@ -9,7 +9,7 @@ e enviado para a Google Play Store.
 - Botão **Ajuda** em todas as telas, com leitura em voz alta e compatível com TalkBack/VoiceOver
 - Tamanho de texto ajustável (Ajustes)
 - Cadastro de doador e de beneficiário (e-mail e senha, ou conta Google)
-- Perfil do beneficiário com história, meta, chave Pix e comprovações (fotos, vídeos, PDF), com opção de deixar visível só para quem tem conta
+- Perfil do beneficiário com história, meta, chave Pix e comprovações (fotos, PDF e links de vídeo), com opção de deixar visível só para quem tem conta
 - Moderação: o perfil só aparece depois de aprovado por um moderador
 - Doação via Pix direto para a pessoa: o doador registra, a pessoa confirma e o valor entra na meta
 - Linha do tempo com doações, prestação de contas (com nota fiscal) e conquistas
@@ -42,85 +42,73 @@ Com `js/config.js` do jeito que está (`FIREBASE_CONFIG = null`), tudo fica salv
 navegador de cada pessoa, e o app começa **vazio** (sem pessoas fictícias). Para testar o
 fluxo completo: crie uma conta de beneficiário, preencha o perfil, e em
 **Minha área → Entrar** use o botão **Moderação (teste)** para aprovar. Depois crie outra
-conta como doador. Use arquivos pequenos (até 4 MB) nesse modo.
+conta como doador. Fotos são reduzidas automaticamente; vídeo só por link.
 
 Para testar no computador, abra a pasta no VS Code e use a extensão **Live Server**
 (o app precisa ser aberto por um endereço `http://`, não com duplo clique).
 
 ---
 
-## Passo a passo para colocar no ar
+## Passo a passo para colocar no ar — 100% GRÁTIS (Firebase Spark + GitHub Pages)
 
-> Itens com custo estão marcados com **(pago)**.
+Nada aqui pede cartão. **Não ative o plano Blaze nem o Storage.**
+Projeto Firebase: `ponte-solidaria-769e5` · Repositório: `igororcobras-hash/ponte-solidaria`.
 
-### 1. Criar o projeto Firebase
-- Link: https://console.firebase.google.com
-- Arquivo: nenhum ainda.
-- Clique em **Adicionar projeto**, nome `ponte-solidaria`. O Google Analytics é opcional.
-- Crie um projeto **novo e separado**. Não use o Firebase do totalcivil.com.br: assim os dois sites não se misturam.
-
-### 2. Ativar o plano Blaze **(pago, cobra só o que passar da cota gratuita)**
-- Link: https://console.firebase.google.com/project/_/usage/details
+### 1. Ligar o site no GitHub Pages
+- Link: https://github.com/igororcobras-hash/ponte-solidaria/settings/pages
 - Arquivo: nenhum.
-- Necessário para guardar fotos, vídeos e documentos (Storage). Há uso gratuito
-  incluído. Configure um **alerta de orçamento** (ex.: R$ 20) em
-  https://console.cloud.google.com/billing para não ter surpresas.
+- Em **Build and deployment → Source: Deploy from a branch**, escolha **main** e **/ (root)** → **Save**. Espere 1–2 minutos.
+- O site fica em https://igororcobras-hash.github.io/ponte-solidaria/
 
-### 3. Ativar o login
-- Link: https://console.firebase.google.com/project/_/authentication/providers
-- Arquivo: nenhum.
+### 2. Ativar o login
+- Link: https://console.firebase.google.com/project/ponte-solidaria-769e5/authentication/providers
 - Ative **E-mail/senha** e **Google**.
+- Link: https://console.firebase.google.com/project/ponte-solidaria-769e5/authentication/settings → **Domínios autorizados → Adicionar**: `igororcobras-hash.github.io`
 
-### 4. Criar o banco de dados e o armazenamento
-- Firestore: https://console.firebase.google.com/project/_/firestore → **Criar banco de dados** → modo produção → região `southamerica-east1` (São Paulo).
-- Storage: https://console.firebase.google.com/project/_/storage → **Começar**.
+### 3. Criar o banco de dados (grátis)
+- Link: https://console.firebase.google.com/project/ponte-solidaria-769e5/firestore
+- **Criar banco de dados → modo produção → região `southamerica-east1`**.
+- Aba **Regras**: https://console.firebase.google.com/project/ponte-solidaria-769e5/firestore/rules — apague tudo, cole o conteúdo do arquivo **`firestore.rules`** (https://raw.githubusercontent.com/igororcobras-hash/ponte-solidaria/main/firestore.rules) e clique **Publicar**.
 
-### 5. Registrar o app Web e copiar a configuração
-- Link: https://console.firebase.google.com/project/_/settings/general
-- Arquivo: **`js/config.js`**
-- Em **Seus apps → Web (</>)**, registre o app e copie o bloco `firebaseConfig`.
-  Cole no lugar de `window.FIREBASE_CONFIG = null;`, assim:
-  `window.FIREBASE_CONFIG = { apiKey: "...", authDomain: "...", ... };`
+### 4. Registrar o app Web e copiar a configuração
+- Link: https://console.firebase.google.com/project/ponte-solidaria-769e5/settings/general
+- Arquivo: **`js/config.js`** — editar em https://github.com/igororcobras-hash/ponte-solidaria/edit/main/js/config.js
+- Em **Seus apps → Web (</>)** registre o app (apelido `ponte`, **sem** Firebase Hosting) e copie o bloco `firebaseConfig`.
+- Cole no lugar de `window.FIREBASE_CONFIG = null;`: `window.FIREBASE_CONFIG = { apiKey: "...", ... };` e clique **Commit changes**.
+- (A chave `apiKey` do Firebase Web não é segredo; a proteção está nas regras do passo 3.)
 
-### 6. Publicar o site e as regras de segurança
-- Link do Node.js (se não tiver): https://nodejs.org
-- Arquivos: **`firebase.json`**, **`firestore.rules`**, **`storage.rules`** (já prontos)
-- No terminal, dentro da pasta `ponte-solidaria`:
-  ```
-  npm install -g firebase-tools
-  firebase login
-  firebase use --add            (escolha o projeto ponte-solidaria)
-  firebase deploy
-  ```
-- O site fica em `https://SEU-PROJETO.web.app`.
+### 5. Criar o primeiro moderador
+- Crie sua conta pelo próprio app. Copie seu UID em https://console.firebase.google.com/project/ponte-solidaria-769e5/authentication/users
+- Link: https://console.firebase.google.com/project/ponte-solidaria-769e5/firestore/data → **Iniciar coleção** `admins` → ID do documento = seu UID (um campo qualquer, ex.: `ativo` = true).
 
-### 7. Criar o primeiro moderador
-- Link: https://console.firebase.google.com/project/_/firestore/data
-- Arquivo: nenhum.
-- Crie sua conta pelo próprio app. Depois, no Firestore, crie a coleção **`admins`**
-  com um documento cujo **ID é o seu UID** (está em Authentication → Users). Não precisa de campos.
-  Só moderadores criados assim conseguem aprovar perfis.
+### Limites do plano grátis
+- Fotos são reduzidas para ~300 KB e guardadas no banco; PDF até 600 KB; **vídeo só por link** (YouTube "não listado" ou Google Drive).
+- Firestore grátis: 1 GiB, 50 mil leituras e 20 mil gravações por dia. Auth: 50 mil usuários ativos/mês.
 
-### 8. Conta de desenvolvedor Google Play **(pago: taxa única de US$ 25)**
+---
+
+## Google Play (opcional, depois que o site estiver no ar)
+
+### 6. Conta de desenvolvedor Google Play **(pago: taxa única de US$ 25)**
 - Link: https://play.google.com/console/signup
 - Arquivo: nenhum (pedem documento de identidade e verificação).
 
-### 9. Gerar o app Android
+### 7. Gerar o app Android
 - Link: https://www.pwabuilder.com
-- Arquivo: o endereço do passo 6 (`https://SEU-PROJETO.web.app`).
+- Arquivo: o endereço do site (`https://igororcobras-hash.github.io/ponte-solidaria/`).
 - Clique em **Package for stores → Android** e baixe o pacote. Ele traz:
   - o arquivo **`.aab`** (vai para a Play Store);
   - o arquivo **`assetlinks.json`**: coloque-o na pasta **`.well-known/`** deste projeto
-    e rode `firebase deploy` de novo (isso tira a barra do navegador de dentro do app).
+    e envie ao GitHub (Add file → Upload files) (isso tira a barra do navegador de dentro do app).
   - Guarde a **chave de assinatura** que vem junto: sem ela não dá para atualizar o app depois.
 
-### 10. Teste fechado obrigatório
+### 8. Teste fechado obrigatório
 - Link: https://play.google.com/console
 - Arquivo: o **`.aab`** do passo 9.
 - Contas pessoais novas precisam de **12 testadores por 14 dias seguidos** antes de publicar.
 - Na Play Console: **Testar → Teste fechado → Criar versão**, envie o `.aab` e adicione os e-mails dos testadores.
 
-### 11. Publicar
+### 9. Publicar
 - Link: https://play.google.com/console
 - Arquivos: o mesmo **`.aab`**, os ícones da pasta **`icons/`** e prints das telas.
 - Peça **acesso à produção**, preencha a ficha da loja, a política de privacidade e a classificação de conteúdo.

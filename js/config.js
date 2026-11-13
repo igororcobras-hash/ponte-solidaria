@@ -14,13 +14,9 @@ window.FIREBASE_CONFIG = null;
 /* Exemplo (troque pelos seus dados):
 window.FIREBASE_CONFIG = {
   apiKey: "AIza...",
-  authDomain: "ponte-solidaria.firebaseapp.com",
-  projectId: "ponte-solidaria",
-  storageBucket: "ponte-solidaria.appspot.com",
+  authDomain: "ponte-solidaria-769e5.firebaseapp.com",
+  projectId: "ponte-solidaria-769e5",
   messagingSenderId: "000000000000",
   appId: "1:000000000000:web:xxxxxxxxxxxx"
 };
 */
-
-// Tamanho máximo por arquivo enviado (em MB)
-window.MAX_FILE_MB = 50;
